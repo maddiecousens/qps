@@ -4,7 +4,7 @@ import time
 
 from datetime import datetime
 from collections import defaultdict
-from stat import ST_SIZE
+# from stat import ST_SIZE
 
 import threading
 
@@ -15,7 +15,8 @@ class LogProcessor(object):
         self.path = path
         self.print_interval = float(print_interval)
         
-        self.loglines = self.tail(LogProcessor.open_log(self.path))
+        # self.file = LogProcessor.open_log(self.path)
+        self.loglines = self.tail()
         self.next_call = time.time()
 
     @staticmethod
@@ -53,29 +54,51 @@ class LogProcessor(object):
                 log_chunk = LogSummary(self.path, self.print_interval)
 
 
-    def tail(self, thefile):
+    def tail(self):
         """
         Creates Generator for rotating log file.
 
         Detects file rotation by redution in size.
         """
-        # Jump to end of file. 
-        #   seek(offset, from_what)
-        #   from_what: 0 measures from the beg, 1 uses the current pos, 2 uses 
-        #       the end of the file as reference point. 
+
+        ### inode method ###
+        thefile = LogProcessor.open_log(self.path)
+        # curino = os.fstat(current.fileno()).st_ino
+
+        # current.seek(0,2)
+
+        # while True:
+        #     while True:
+        #         line = current.readline()
+        #         if line == "":
+        #             break
+        #         print line
+
+        #     try:
+        #         print os.stat(self.path).st_ino, ' -- ', curino
+        #         if os.stat(self.path).st_ino != curino:
+        #             new = open(self.path, "r")
+        #             current.close()
+        #             current = new
+        #             curino = os.fstat(current.fileno()).st_ino
+        #             continue
+        #     except IOError:
+        #         pass
+        #     time.sleep(0.1)
+
+        ### filesize method ###
+
         thefile.seek(0,2)
 
-        # generator
         while True:
             # read line, track current position
             line = thefile.readline()
             pos = thefile.tell()
             
-            # If line == '' this means (a) log has been rotated (b) waiting on
-            #   web request
+            # If line == '', log has been rotated, or waiting on web request.
             if not line:
                 # if file has been rotated, re-open
-                if os.stat(self.path)[ST_SIZE] < pos:
+                if os.stat(self.path).st_size < pos:
                     # print '***ROTATING***'
                     thefile.close()
                     thefile = LogProcessor.open_log(self.path)

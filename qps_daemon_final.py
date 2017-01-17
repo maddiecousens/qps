@@ -4,7 +4,6 @@ import time
 
 from datetime import datetime
 from collections import defaultdict
-from stat import ST_SIZE
 
 import threading
 
@@ -19,7 +18,7 @@ class LogProcessor(object):
         self.print_interval = float(print_interval)
         
         # These attributes will be changed every print interval
-        self.start_datetime = datetime.now().strftime("%a %b %H:%M:%S %Y")
+        self.start_datetime = datetime.now().strftime("%a %b %H:%M:%S:%f %Y")
         self.start_time = time.time()
         self._summary = defaultdict(lambda: defaultdict(int))
         self.count = 0
@@ -53,7 +52,7 @@ class LogProcessor(object):
             # If line == '', log has been rotated, or waiting on web request.
             if not line:
                 # if file has been rotated, re-open
-                if os.stat(self.path)[ST_SIZE] < pos:
+                if os.stat(self.path).st_size < pos:
                     # print '***ROTATING***'
                     thefile.close()
                     thefile = LogProcessor.open_log(self.path)
@@ -95,8 +94,7 @@ class LogProcessor(object):
         finally:
             LogProcessor.lock.release()
             self.print_summary(local_datetime, local_summary, local_count)
-
-        
+  
 
     def print_summary(self, start_datetime, summary, total_count):
         """
