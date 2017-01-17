@@ -11,10 +11,12 @@ import threading
 
 class LogProcessor(object):
 
+    PRINT_BODY = '{resource: <11}{response} {qps}'
+
     def __init__(self, path, print_interval):
         self.path = path
         self.print_interval = float(print_interval)
-
+        
         # These attributes will be changed every print interval
         self.start_datetime = datetime.now().strftime("%a %b %H:%M:%S %Y")
         self.start_time = time.time()
@@ -30,9 +32,6 @@ class LogProcessor(object):
     @staticmethod
     def open_log(path):
         return open(path, 'r')
-
-    
-
 
     def tail(self, thefile):
         """
@@ -75,6 +74,7 @@ class LogProcessor(object):
         Makes call to print summary of current state of the instance, then 
         resets instance attributes.
         """
+        # self.print_summary()
         self.print_summary()
         # reset
         self.start_datetime = datetime.now().strftime("%a %b %H:%M:%S:%f %Y")
@@ -89,14 +89,21 @@ class LogProcessor(object):
         Timestamp
         =============
         $resource $response $average_qps
+        $total
 
         """
-        print '{} - {}'.format(self.start_datetime, self.start_time)
-        print "=" * 30
+        print self.start_datetime
+        print '=' * 30
+
         for resource, response in self._summary.iteritems():
             for response, count in response.iteritems():
-                print '{}{}'.format(resource, ' ' * (10 - len(resource))), response, count / self.print_interval
-        print 'total      {}\n'.format(self.count)
+                print LogProcessor.PRINT_BODY.format(resource=resource,
+                                                     response=response,
+                                                     qps=(count / 
+                                                          self.print_interval))
+
+        print '{0: <11}{total}\n'.format('total', total=self.count)
+
 
     def process_log(self):
         """
