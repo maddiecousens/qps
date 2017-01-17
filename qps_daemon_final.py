@@ -15,35 +15,23 @@ class LogProcessor(object):
         self.path = path
         self.print_interval = float(print_interval)
 
-        self.loglines = self.tail(LogProcessor.open_log(self.path))
-
+        # These attributes will be changed every print interval
         self.start_datetime = datetime.now().strftime("%a %b %H:%M:%S %Y")
         self.start_time = time.time()
         self._summary = defaultdict(lambda: defaultdict(int))
         self.count = 0
 
+        # This attribute is used for the Timing thread
         self.next_call = time.time()
+
+        # Creates an generator by calling 'tail' on the open log
+        self.loglines = self.tail(LogProcessor.open_log(self.path))
 
     @staticmethod
     def open_log(path):
         return open(path, 'r')
 
-    def process_log(self):
-        """
-        Process live log file. Read from generator.
-        """
-
-        for line in self.loglines:
-            # parse line
-            resource, response = line.split()[2:-1]
-            # add data to summary dictionary
-            self.add_logline(resource, response)
-            
-            # thread printing, accounting for time drift
-            self.next_call = self.next_call + self.print_interval
-            t = threading.Timer( self.next_call - time.time(), self.reset)
-            t.daemon = True
-            t.start()
+    
 
 
     def tail(self, thefile):
@@ -52,20 +40,17 @@ class LogProcessor(object):
 
         Detects file rotation by redution in size.
         """
-        # Jump to end of file. 
-        #   seek(offset, from_what)
+        # Jump to end of file | seek(offset, from_what)
         #   from_what: 0 measures from the beg, 1 uses the current pos, 2 uses 
         #       the end of the file as reference point. 
         thefile.seek(0,2)
 
-        # generator
         while True:
             # read line, track current position
             line = thefile.readline()
             pos = thefile.tell()
             
-            # If line == '' this means (a) log has been rotated (b) waiting on
-            #   web request
+            # If line == '', log has been rotated, or waiting on web request.
             if not line:
                 # if file has been rotated, re-open
                 if os.stat(self.path)[ST_SIZE] < pos:
@@ -80,21 +65,31 @@ class LogProcessor(object):
 
     def add_logline(self, resource, response):
         """
-        Input parsed log, add to summary dictionary.
+        Inputs resource and response, adds to summary default dictionary.
         """
         self._summary[resource][response] += 1
         self.count += 1
 
     def reset(self):
+        """
+        Makes call to print summary of current state of the instance, then 
+        resets instance attributes.
+        """
         self.print_summary()
-        self.start_datetime = datetime.now().strftime("%a %b %H:%M:%S %Y")
+        # reset
+        self.start_datetime = datetime.now().strftime("%a %b %H:%M:%S:%f %Y")
         self.start_time = time.time()
         self._summary = defaultdict(lambda: defaultdict(int))
         self.count = 0
 
     def print_summary(self):
         """
-        Print summary dictionary.
+        Prints a summary of the current state of instance:
+
+        Timestamp
+        =============
+        $resource $response $average_qps
+
         """
         print '{} - {}'.format(self.start_datetime, self.start_time)
         print "=" * 30
@@ -102,6 +97,26 @@ class LogProcessor(object):
             for response, count in response.iteritems():
                 print '{}{}'.format(resource, ' ' * (10 - len(resource))), response, count / self.print_interval
         print 'total      {}\n'.format(self.count)
+
+    def process_log(self):
+        """
+        Processes live log file by iterating over the generator. Uses a thread
+        to call reset() every [print_interval] seconds.
+        """
+
+        for line in self.loglines:
+            # parse line
+            resource, response = line.split()[2:-1]
+            # add data to summary dictionary
+            self.add_logline(resource, response)
+            
+            # Set thread timer for [print_interval] seconds. Account for drift
+            # by subtracting off the current time. Thread calls reset(). 
+            # Set as daemon, start thread.
+            self.next_call = self.next_call + self.print_interval
+            t = threading.Timer( self.next_call - time.time(), self.reset)
+            t.daemon = True
+            t.start()
 
 def main(argv):
     """
@@ -113,6 +128,7 @@ def main(argv):
         description="Live log tail summary"
     )
 
+    # Required argument, giving log file
     parser.add_argument(
         "--input-file", "-l", dest="input_file", metavar='FILE',
         type=str, required=True,
@@ -120,9 +136,10 @@ def main(argv):
             "the file where logs are read from"
         )
     )
+    # Optional argument to set print_interval
     parser.add_argument(
         "--print-interval", "-p", dest="print_interval", metavar='SECONDS',
-        type=int, default=10,
+        type=int, required=False, default=10,
         help="How often to print summary of logs"
     )
 
