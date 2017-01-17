@@ -66,7 +66,7 @@ class LogProcessor(object):
         """
         Inputs resource and response, adds to summary default dictionary.
         """
-
+        # Lock and add to dictionary
         with self.lock:
             self._summary[resource][response] += 1
             self.count += 1
@@ -77,6 +77,10 @@ class LogProcessor(object):
         Makes call to print summary of current state of the instance, then 
         resets instance attributes.
         """
+        # Set thread timer for [print_interval] seconds. Account for drift
+        # by subtracting off the current time. Thread calls reset(). 
+        # Set as daemon, start thread.
+
         self.next_call = self.next_call + self.print_interval
         t = threading.Timer( self.next_call - time.time(), self.reset)
         t.daemon = True
@@ -123,6 +127,9 @@ class LogProcessor(object):
         Processes live log file by iterating over the generator. Uses a thread
         to call reset() every [print_interval] seconds.
         """
+        # Set thread timer for [print_interval] seconds. Account for drift
+        # by subtracting off the current time. Thread calls reset(). 
+        # Set as daemon, start thread.
 
         self.next_call = self.next_call + self.print_interval
         t = threading.Timer( self.next_call - time.time(), self.reset)
@@ -133,12 +140,7 @@ class LogProcessor(object):
             # parse line
             resource, response = line.split()[2:-1]
             # add data to summary dictionary
-            self.add_logline(resource, response)
-            
-            # Set thread timer for [print_interval] seconds. Account for drift
-            # by subtracting off the current time. Thread calls reset(). 
-            # Set as daemon, start thread.
-            
+            self.add_logline(resource, response)       
 
 def main(argv):
     """
