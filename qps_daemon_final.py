@@ -14,8 +14,15 @@ class LogProcessor(object):
     def __init__(self, path, print_interval):
         self.path = path
         self.print_interval = float(print_interval)
-        
+
         self.loglines = self.tail(LogProcessor.open_log(self.path))
+
+        self.start_datetime = datetime.now().strftime("%a %b %H:%M:%S %Y")
+        self.start_time = time.time()
+        self._summary = defaultdict(lambda: defaultdict(int))
+        self.count = 0
+
+        self.next_call = time.time()
 
     @staticmethod
     def open_log(path):
@@ -25,19 +32,18 @@ class LogProcessor(object):
         """
         Process live log file. Read from generator.
         """
-        log_chunk = LogSummary(self.path, self.print_interval)
 
         for line in self.loglines:
             # parse line
             resource, response = line.split()[2:-1]
-            # add data to dictionary
-            log_chunk.add_logline(resource, response)
+            # add data to summary dictionary
+            self.add_logline(resource, response)
             
-            # After print_interval, print summary, reset
-            if time.time() - log_chunk.start_time > self.print_interval:
-                t = threading.Thread(target=log_chunk.print_summary)
-                t.start()
-                log_chunk = LogSummary(self.path, self.print_interval)
+            # thread printing, accounting for time drift
+            self.next_call = self.next_call + self.print_interval
+            t = threading.Timer( self.next_call - time.time(), self.reset)
+            t.daemon = True
+            t.start()
 
 
     def tail(self, thefile):
@@ -72,20 +78,6 @@ class LogProcessor(object):
                     continue
             yield line
 
-class LogSummary(LogProcessor):
-    """
-    Subclass of LogProcessor
-
-    Used to represent a time interval chunk of the log
-    """
-
-    def __init__(self, path, interval):
-        LogProcessor.__init__(self, path, interval)
-        self.start_datetime = datetime.now().strftime("%a %b %H:%M:%S %Y")
-        self.start_time = time.time()
-        self._summary = defaultdict(lambda: defaultdict(int))
-        self.count = 0
-
     def add_logline(self, resource, response):
         """
         Input parsed log, add to summary dictionary.
@@ -93,11 +85,18 @@ class LogSummary(LogProcessor):
         self._summary[resource][response] += 1
         self.count += 1
 
+    def reset(self):
+        self.print_summary()
+        self.start_datetime = datetime.now().strftime("%a %b %H:%M:%S %Y")
+        self.start_time = time.time()
+        self._summary = defaultdict(lambda: defaultdict(int))
+        self.count = 0
+
     def print_summary(self):
         """
         Print summary dictionary.
         """
-        print self.start_datetime
+        print '{} - {}'.format(self.start_datetime, self.start_time)
         print "=" * 30
         for resource, response in self._summary.iteritems():
             for response, count in response.iteritems():
@@ -132,7 +131,6 @@ def main(argv):
     # Begin reading log
     p = LogProcessor(args.input_file, args.print_interval)
     p.process_log()
-
 
 if __name__ == "__main__":
     try:
