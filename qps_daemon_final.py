@@ -11,11 +11,11 @@ import threading
 class LogProcessor(object):
 
     PRINT_BODY = '{resource: <11}{response} {qps}'
-    lock = threading.Lock()
 
     def __init__(self, path, print_interval):
         self.path = path
         self.print_interval = float(print_interval)
+        self.lock = threading.Lock()
         
         # These attributes will be changed every print interval
         self.start_datetime = datetime.now().strftime("%a %b %H:%M:%S:%f %Y")
@@ -66,22 +66,23 @@ class LogProcessor(object):
         """
         Inputs resource and response, adds to summary default dictionary.
         """
-        LogProcessor.lock.acquire()
 
-        try:
+        with self.lock:
             self._summary[resource][response] += 1
             self.count += 1
-        finally:
-            LogProcessor.lock.release()
+
 
     def reset(self):
         """
         Makes call to print summary of current state of the instance, then 
         resets instance attributes.
         """
-        LogProcessor.lock.acquire()
+        self.next_call = self.next_call + self.print_interval
+        t = threading.Timer( self.next_call - time.time(), self.reset)
+        t.daemon = True
+        t.start()
 
-        try:
+        with self.lock:
             local_datetime = self.start_datetime
             local_summary = self._summary
             local_count = self.count
@@ -91,9 +92,7 @@ class LogProcessor(object):
             self._summary = defaultdict(lambda: defaultdict(int))
             self.count = 0
             
-        finally:
-            LogProcessor.lock.release()
-            self.print_summary(local_datetime, local_summary, local_count)
+        self.print_summary(local_datetime, local_summary, local_count)
   
 
     def print_summary(self, start_datetime, summary, total_count):
@@ -125,6 +124,11 @@ class LogProcessor(object):
         to call reset() every [print_interval] seconds.
         """
 
+        self.next_call = self.next_call + self.print_interval
+        t = threading.Timer( self.next_call - time.time(), self.reset)
+        t.daemon = True
+        t.start()
+
         for line in self.loglines:
             # parse line
             resource, response = line.split()[2:-1]
@@ -134,10 +138,7 @@ class LogProcessor(object):
             # Set thread timer for [print_interval] seconds. Account for drift
             # by subtracting off the current time. Thread calls reset(). 
             # Set as daemon, start thread.
-            self.next_call = self.next_call + self.print_interval
-            t = threading.Timer( self.next_call - time.time(), self.reset)
-            t.daemon = True
-            t.start()
+            
 
 def main(argv):
     """
