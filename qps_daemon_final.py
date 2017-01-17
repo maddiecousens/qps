@@ -67,31 +67,36 @@ class LogProcessor(object):
         """
         Inputs resource and response, adds to summary default dictionary.
         """
-        self._summary[resource][response] += 1
-        self.count += 1
+        LogProcessor.lock.acquire()
+
+        try:
+            self._summary[resource][response] += 1
+            self.count += 1
+        finally:
+            LogProcessor.lock.release()
 
     def reset(self):
         """
         Makes call to print summary of current state of the instance, then 
         resets instance attributes.
         """
-        # self.print_summary()
         LogProcessor.lock.acquire()
+
         try:
             local_datetime = self.start_datetime
             local_summary = self._summary
             local_count = self.count
+
+            self.start_datetime = datetime.now().strftime("%a %b %H:%M:%S:%f %Y")
+            self.start_time = time.time()
+            self._summary = defaultdict(lambda: defaultdict(int))
+            self.count = 0
             
         finally:
             LogProcessor.lock.release()
             self.print_summary(local_datetime, local_summary, local_count)
 
-        # self.print_summary()
-        # reset
-        self.start_datetime = datetime.now().strftime("%a %b %H:%M:%S:%f %Y")
-        self.start_time = time.time()
-        self._summary = defaultdict(lambda: defaultdict(int))
-        self.count = 0
+        
 
     def print_summary(self, start_datetime, summary, total_count):
         """
