@@ -12,6 +12,7 @@ import threading
 class LogProcessor(object):
 
     PRINT_BODY = '{resource: <11}{response} {qps}'
+    lock = threading.Lock()
 
     def __init__(self, path, print_interval):
         self.path = path
@@ -75,14 +76,24 @@ class LogProcessor(object):
         resets instance attributes.
         """
         # self.print_summary()
-        self.print_summary()
+        LogProcessor.lock.acquire()
+        try:
+            local_datetime = self.start_datetime
+            local_summary = self._summary
+            local_count = self.count
+            
+        finally:
+            LogProcessor.lock.release()
+            self.print_summary(local_datetime, local_summary, local_count)
+
+        # self.print_summary()
         # reset
         self.start_datetime = datetime.now().strftime("%a %b %H:%M:%S:%f %Y")
         self.start_time = time.time()
         self._summary = defaultdict(lambda: defaultdict(int))
         self.count = 0
 
-    def print_summary(self):
+    def print_summary(self, start_datetime, summary, total_count):
         """
         Prints a summary of the current state of instance:
 
@@ -92,17 +103,17 @@ class LogProcessor(object):
         $total
 
         """
-        print self.start_datetime
+        print start_datetime
         print '=' * 30
 
-        for resource, response in self._summary.iteritems():
+        for resource, response in summary.iteritems():
             for response, count in response.iteritems():
                 print LogProcessor.PRINT_BODY.format(resource=resource,
                                                      response=response,
                                                      qps=(count / 
                                                           self.print_interval))
 
-        print '{0: <11}{total}\n'.format('total', total=self.count)
+        print '{0: <11}{total}\n'.format('total', total=total_count)
 
 
     def process_log(self):
